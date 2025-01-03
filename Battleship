@@ -29,6 +29,8 @@ struct Player
     char copiedGird[GRID][GRID];
     char difficulty[10];
     struct Ship ships[4];
+    int smokeScreenUsageNB;
+    int smokeScreenTracker;
 };
 
 // creates grid
@@ -178,6 +180,7 @@ int canPlaceShip(char grid[GRID][GRID], int row, int col, int size, char dir)
     return 1;
 }
 
+// places a players ships
 void placeShip(struct Player *player)
 {
     for (int i = 0; i < 4; i++)
@@ -245,13 +248,27 @@ int generateRand()
 
 void gamePlay(struct Player *curPlayer, struct Player *oppPlayer);
 
+// counts nymber of ships sunk for the given player
+int countTotalSank(struct Player *player)
+{
+    int count = 0;
+    for (int i = 0; i < 4; i++)
+    {
+        if (player->ships[i].sank == 1)
+        {
+            count++;
+        }
+    }
+    return count;
+}
+
 // fire method - 2 player
 void fire(struct Player *curPlayer, struct Player *oppPlayer, int row, int col)
 {
     // was attacked
     if (oppPlayer->grid[row][col] == '*' || oppPlayer->grid[row][col] == 'o')
     {
-        printf("You already attacked the given coordinates (%c%D)! Try again.\n", 'A' + col, row);
+        printf("You already attacked the given coordinates (%c%D)! Try again.\n", 'A' + col, row + 1);
         gamePlay(curPlayer, oppPlayer);
         return;
     }
@@ -282,7 +299,7 @@ void fire(struct Player *curPlayer, struct Player *oppPlayer, int row, int col)
 
                 if (oppPlayer->ships[i].size == oppPlayer->ships[i].hits && oppPlayer->ships[i].sank == 0)
                 {
-                    printf("The \"%s\" has sank!", oppPlayer->ships[i].name);
+                    printf("The \"%s\" has sank!\n", oppPlayer->ships[i].name);
                     oppPlayer->ships[i].sank = 1;
                 }
             }
@@ -299,6 +316,114 @@ void fire(struct Player *curPlayer, struct Player *oppPlayer, int row, int col)
     }
 }
 
+// smokescreen - 2 player
+void smokescreen(struct Player *curPlayer, struct Player *oppPlayer, int row, int col)
+{
+    if (curPlayer->smokeScreenUsageNB == 0)
+    {
+        printf("You used all of the 3 smoke screens you have!\n");
+        return;
+    }
+    else
+    {
+        if (row + 2 > GRID || col + 2 > GRID)
+        {
+            printf("Out of bounds!\n");
+            gamePlay(curPlayer, oppPlayer);
+            return;
+        }
+
+        printf("Activating 2x2 smoke screen area at coordinates (%c%d)!\n", 'A' + col, row + 1);
+        curPlayer->smokeScreenTracker = 2;
+        gridCopy(curPlayer->grid, curPlayer->copiedGird);
+
+        for (int i = row; i < row + 2; i++)
+        {
+            for (int j = col; j < col + 2; j++)
+            {
+                if (curPlayer->grid[i][j] != '*')
+                {
+                    curPlayer->grid[i][j] = 'X';
+                }
+            }
+        }
+    }
+}
+
+// checks smokescreen: expired or not, keeps track of usages
+void checkSmokeScreen(struct Player *curPlayer)
+{
+    int smokescreenFound = 0;
+
+    if (curPlayer->smokeScreenTracker != 0)
+    {
+        curPlayer->smokeScreenTracker--;
+    }
+
+    if (curPlayer->smokeScreenTracker == 0)
+    {
+        for (int i = 0; i < GRID; i++)
+        {
+            for (int j = 0; j < GRID; j++)
+            {
+                if (curPlayer->grid[i][j] == 'X')
+                {
+                    curPlayer->grid[i][j] = curPlayer->copiedGird[i][j];
+                    smokescreenFound = 1;
+                }
+            }
+        }
+
+        if (smokescreenFound == 1)
+        {
+            curPlayer->smokeScreenUsageNB--;
+            printf("Smokescreen effect have expired! (%d usages left)\n", curPlayer->smokeScreenUsageNB);
+        }
+
+        return;
+    }
+}
+
+// torpedo attack : row
+void torpedoColumn(struct Player *curPlayer, struct Player *oppPlayer, int col)
+{
+    if (countTotalSank(oppPlayer) < 3)
+    {
+        printf("You cannot use 'torpedo' unless you sank 3 opponent ships!\n");
+        gamePlay(curPlayer, oppPlayer);
+        return;
+    }
+
+    printf("Activating 'torpedo' for column: %c\n", col);
+    for (int row = 0; row < GRID; row++)
+    {
+        if (oppPlayer->grid[row][col] != '*' && oppPlayer->grid[row][col] != 'o')
+        {
+            fire(oppPlayer, oppPlayer, row, col);
+        }
+    }
+}
+
+// torpedo attack : row
+void torpedoRow(struct Player *curPlayer, struct Player *oppPlayer, int row)
+{
+    if (countTotalSank(oppPlayer) < 3)
+    {
+        printf("You cannot use 'torpedo' unless you sank 3 opponent ships!\n");
+        gamePlay(curPlayer, oppPlayer);
+        return;
+    }
+
+    printf("Activating 'torpedo' for row: %d\n", row + 1);
+    for (int col = 0; col < GRID; col++)
+    {
+        if (oppPlayer->grid[row][col] != '*' && oppPlayer->grid[row][col] != 'o')
+        {
+            fire(oppPlayer, oppPlayer, row, col);
+        }
+    }
+}
+
 // gameplay - 2 player
 void gamePlay(struct Player *curPlayer, struct Player *oppPlayer)
 {
@@ -306,6 +431,8 @@ void gamePlay(struct Player *curPlayer, struct Player *oppPlayer)
     char command[15];
     int row;
     char col;
+
+    checkSmokeScreen(curPlayer);
 
     while (1)
     {
@@ -319,45 +446,129 @@ void gamePlay(struct Player *curPlayer, struct Player *oppPlayer)
 
         input[strcspn(input, "\n")] = '\0';
 
-        if (sscanf(input, "%14s %c%d", command, &col, &row) == 3)
+        char *token = strtok(input, " ");
+
+        if (token == NULL)
         {
+            printf("Invalid input format. Use the format: (command) (col)(row) (e.g., Fire A1).\n");
+            continue;
+        }
 
-            for (int i = 0; command[i]; i++)
-            {
-                command[i] = tolower((unsigned char)command[i]);
-            }
+        strncpy(command, token, sizeof(command));
 
-            if (col >= 'a' && col <= 'j')
-            {
-                col = col - 'a' + 'A';
-            }
+        command[sizeof(command) - 1] = '\0';
 
-            if (row < 1 || row > GRID || col < 'A' || col >= 'A' + GRID)
+        for (int i = 0; command[i]; i++)
+        {
+            command[i] = tolower((unsigned char)command[i]);
+        }
+
+        token = strtok(NULL, " ");
+
+        // checks for torpedo
+
+        if (strcmp(command, "torpedo") == 0)
+        {
+            if (token == NULL || strlen(token) != 1)
             {
-                printf("Invalid coordinates. Column must be A-J and Row between 1-10.\n");
+                printf("Invalid input for 'torpedo'. Provide a single column (A-J) or row number (1-10).\n");
                 continue;
             }
 
-            row--;
-            int newCol = col - 'A';
+            // checks torpedo col
 
-            if (strcmp(command, "fire") == 0)
+            if ((token[0] >= 'A' && token[0] <= 'J') || (token[0] >= 'a' && token[0] <= 'j'))
             {
-                fire(curPlayer, oppPlayer, row, newCol);
-                break;
+                col = toupper((unsigned char)token[0]);
+                if (col < 'A' || col >= 'A' + GRID)
+                {
+                    printf("Invalid column. Column must be A-J.\n");
+                    continue;
+                }
+
+                torpedoColumn(curPlayer, oppPlayer, col - 'A');
+                return;
+            }
+            else if (isdigit(token[0])) // checks torpedo row
+            {
+                row = atoi(token);
+                if (row < 1 || row > GRID)
+                {
+                    printf("Invalid row. Row must be between 1-10.\n");
+                    continue;
+                }
+
+                row--;
+
+                torpedoRow(curPlayer, oppPlayer, row);
+                return;
             }
             else
             {
-                printf("Unknown command: %s. Valid command is 'fire'.\n", command);
+                printf("Invalid input for 'torpedo'. Provide a single column (A-J) or row number (1-10).\n");
+                continue;
             }
+        }
+
+        else if (token == NULL || sscanf(token, "%c%d", &col, &row) != 2)
+        {
+            printf("Invalid coordinates format. Use the format: (command) (col)(row) (e.g., Fire A1).\n");
+            continue;
+        }
+
+        if (token == NULL || sscanf(token, "%c%d", &col, &row) != 2)
+        {
+            printf("Invalid coordinates format. Use the format: (command) (col)(row) (e.g., Fire A1).\n");
+            continue;
+        }
+
+        if (col >= 'a' && col <= 'j')
+        {
+            col = col - 'a' + 'A';
+        }
+
+        if (row < 1 || row > GRID || col < 'A' || col >= 'A' + GRID)
+        {
+            printf("Invalid coordinates. Column must be A-J and Row between 1-10.\n");
+            continue;
+        }
+
+        row--;
+        int newCol = col - 'A';
+
+        // Handle commands
+
+        if (strcmp(command, "fire") == 0) // fire attack
+        {
+            fire(curPlayer, oppPlayer, row, newCol);
+            return;
+        }
+        else if (strcmp(command, "smokescreen") == 0) // smokescreen
+        {
+            smokescreen(curPlayer, oppPlayer, row, newCol);
+            return;
         }
         else
         {
-            printf("Invalid input format. Use the format: (command) (col)(row) (e.g., Fire A1).\n");
+            printf("Unknown command: %s. Valid commands are 'fire' or 'smokescreen'.\n", command);
         }
     }
 }
 
+// checks winner
+int checkWin(struct Player *oppPlayer)
+{
+    int count = countTotalSank(oppPlayer);
+
+    if (count == 4)
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+// easy 2 player mode main
 void easyMain(struct Player *player1, struct Player *player2)
 {
     initializeRandom();
@@ -379,15 +590,16 @@ void easyMain(struct Player *player1, struct Player *player2)
         printf("\n%s's turn.\n", curPlayer->name);
 
         printf("\n");
+        gridDisplay(curPlayer->grid);
 
         printf("Opponent's grid: \n");
         gridDisplayOpp(oppPlayer->grid);
 
         gamePlay(curPlayer, oppPlayer);
 
-        if (false) // checkWin(oppPlayer)
+        if (checkWin(oppPlayer) == 1)
         {
-            printf("%s wins!\n", curPlayer->name);
+            printf("%s Wins The Game!\n", curPlayer->name);
             break;
         }
 
@@ -398,6 +610,7 @@ void easyMain(struct Player *player1, struct Player *player2)
     return;
 }
 
+// hard 2 player mode main
 void hardMain(struct Player *p1, struct Player *p2)
 {
     initializeRandom();
@@ -438,6 +651,7 @@ void hardMain(struct Player *p1, struct Player *p2)
     return;
 }
 
+// main
 int main()
 {
     struct Player player1, player2;
@@ -521,6 +735,8 @@ int main()
 
     printf("For player 1:\n");
     gridCreate(player1.grid);
+    player1.smokeScreenUsageNB = 3;
+    player1.smokeScreenTracker = 0;
     createShip(&player1);
     placeShip(&player1);
     printf("Player 1's grid:\n");
@@ -540,6 +756,8 @@ int main()
     {
         printf("For player 2:\n");
         gridCreate(player2.grid);
+        player2.smokeScreenUsageNB = 3;
+        player2.smokeScreenTracker = 0;
         createShip(&player2);
         placeShip(&player2);
         printf("Player 2's grid:\n");

@@ -31,6 +31,9 @@ struct Player
     struct Ship ships[4];
     int smokeScreenUsageNB;
     int smokeScreenTracker;
+    int artilleryOneRoundTracker;
+    int artilleryActivity;
+    int radarsweeepNB;
 };
 
 // creates grid
@@ -301,6 +304,10 @@ void fire(struct Player *curPlayer, struct Player *oppPlayer, int row, int col)
                 {
                     printf("The \"%s\" has sank!\n", oppPlayer->ships[i].name);
                     oppPlayer->ships[i].sank = 1;
+
+                    // for artillery round checker
+                    curPlayer->artilleryActivity = 2;
+                    curPlayer->artilleryOneRoundTracker = 2;
                 }
             }
         }
@@ -314,6 +321,44 @@ void fire(struct Player *curPlayer, struct Player *oppPlayer, int row, int col)
 
         curPlayer->grid[row][col] = 'o';
     }
+}
+
+// radar sweep - 2 player
+void radarsweep(struct Player *curPlayer, struct Player *oppPlayer, int row, int col)
+{
+    if (curPlayer->radarsweeepNB == 0)
+    {
+        printf("You have used  all the available Radar Sweeps! \n");
+        gamePlay(curPlayer, oppPlayer);
+        return;
+    }
+    else
+    {
+        if (row + 2 > GRID || col + 2 > GRID)
+        {
+            printf("Out of bounds!\n");
+            gamePlay(curPlayer, oppPlayer);
+            return;
+        }
+
+        for (int i = row; i < row + 2; i++)
+        {
+
+            for (int j = col; j < col + 2; j++)
+            {
+
+                if (oppPlayer->grid[i][j] != '~' && oppPlayer->grid[i][j] != 'o' && oppPlayer->grid[i][j] != '*' && oppPlayer->grid[i][j] != 'X')
+                {
+
+                    printf("A ship was located at the 2x2 area starting from the coordinate (%c%d)!\n", 'A' + col, row + 1);
+                    oppPlayer->radarsweeepNB--;
+                    return;
+                }
+            }
+        }
+    }
+    printf("No ship was detected at the  2x2 area starting from the coordinate (%c%d)!\n", 'A' + col, row + 1);
+    return;
 }
 
 // smokescreen - 2 player
@@ -384,6 +429,47 @@ void checkSmokeScreen(struct Player *curPlayer)
     }
 }
 
+// artillery attack 2x2
+void artillery(struct Player *curPlayer, struct Player *oppPlayer, int row, int col)
+{
+    // validates coordinates
+    if (row < 0 || row + 1 >= GRID || col < 0 || col + 1 >= GRID)
+    {
+        printf("Invalid artillery coordinates. Out of bounds.\n");
+        gamePlay(curPlayer, oppPlayer);
+        return;
+    }
+
+    // hits 2x2 area
+    for (int i = row; i < row + 2 && i < GRID; i++)
+    {
+        for (int j = col; j < col + 2 && j < GRID; j++)
+        {
+            if (oppPlayer->grid[i][j] != 'o' && oppPlayer->grid[i][j] != '*')
+            {
+                fire(curPlayer, oppPlayer, i, j);
+            }
+        }
+    }
+
+    curPlayer->artilleryActivity = 0;
+}
+
+// ensures artillery usage
+void checkArtilleryRound(struct Player *curPlayer)
+{
+    if (curPlayer->artilleryOneRoundTracker == 0)
+    {
+        curPlayer->artilleryActivity = 0;
+    }
+
+    if (curPlayer->artilleryOneRoundTracker > 0)
+    {
+        curPlayer->artilleryActivity--;
+        curPlayer->artilleryOneRoundTracker--;
+    }
+}
+
 // torpedo attack : row
 void torpedoColumn(struct Player *curPlayer, struct Player *oppPlayer, int col)
 {
@@ -433,6 +519,7 @@ void gamePlay(struct Player *curPlayer, struct Player *oppPlayer)
     char col;
 
     checkSmokeScreen(curPlayer);
+    checkArtilleryRound(curPlayer);
 
     while (1)
     {
@@ -540,12 +627,31 @@ void gamePlay(struct Player *curPlayer, struct Player *oppPlayer)
 
         if (strcmp(command, "fire") == 0) // fire attack
         {
+
             fire(curPlayer, oppPlayer, row, newCol);
+            return;
+        }
+        else if (strcmp(command, "radarsweep") == 0) // radarsweep
+        {
+            radarsweep(curPlayer, oppPlayer, row, newCol);
             return;
         }
         else if (strcmp(command, "smokescreen") == 0) // smokescreen
         {
             smokescreen(curPlayer, oppPlayer, row, newCol);
+            return;
+        }
+        else if (strcmp(command, "artillery") == 0) // artillery
+        {
+
+            if (curPlayer->artilleryActivity == 1)
+            {
+                artillery(curPlayer, oppPlayer, row, newCol);
+            }
+            else
+            {
+                printf("Artillery can be activated only if you sank a ship in the previous round!\n");
+            }
             return;
         }
         else
@@ -735,8 +841,12 @@ int main()
 
     printf("For player 1:\n");
     gridCreate(player1.grid);
+    player1.radarsweeepNB = 3;
     player1.smokeScreenUsageNB = 3;
     player1.smokeScreenTracker = 0;
+    player1.artilleryOneRoundTracker = 0;
+    player1.artilleryActivity = 0;
+
     createShip(&player1);
     placeShip(&player1);
     printf("Player 1's grid:\n");
@@ -756,8 +866,11 @@ int main()
     {
         printf("For player 2:\n");
         gridCreate(player2.grid);
+        player2.radarsweeepNB = 3;
         player2.smokeScreenUsageNB = 3;
         player2.smokeScreenTracker = 0;
+        player2.artilleryOneRoundTracker = 0;
+        player2.artilleryActivity = 0;
         createShip(&player2);
         placeShip(&player2);
         printf("Player 2's grid:\n");

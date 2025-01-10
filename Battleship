@@ -249,6 +249,54 @@ int generateRand()
     return rand() % 2;
 }
 
+// places bot ships
+void botPlaceShip(struct Player *player)
+{
+    for (int i = 0; i < 4; i++)
+    {
+        struct Ship *curShip = &player->ships[i];
+        int row, col;
+        char dir;
+
+        initializeRandom();
+        while (true)
+        {
+            dir = (rand() % 2 == 0) ? 'h' : 'v';
+
+            if (dir == 'h')
+            {
+                row = rand() % GRID;
+                col = rand() % (GRID - curShip->size + 1);
+            }
+            else
+            {
+                row = rand() % (GRID - curShip->size + 1);
+                col = rand() % GRID;
+            }
+
+            if (canPlaceShip(player->grid, row, col, curShip->size, dir))
+            {
+                // fix row, change col
+                if (dir == 'h')
+                {
+                    for (int i = col; i < col + curShip->size; i++)
+                    {
+                        player->grid[row][i] = curShip->name[0];
+                    }
+                }
+                else
+                {
+                    for (int i = row; i < row + curShip->size; i++)
+                    {
+                        player->grid[i][col] = curShip->name[0];
+                    }
+                }
+                break;
+            }
+        }
+    }
+}
+
 void gamePlay(struct Player *curPlayer, struct Player *oppPlayer);
 
 // counts nymber of ships sunk for the given player
@@ -661,6 +709,11 @@ void gamePlay(struct Player *curPlayer, struct Player *oppPlayer)
     }
 }
 
+// bot gameplay, calls all bot methods accoridng to conditions
+void botGamePlay(struct Player *curPlayer, struct Player *oppPlayer)
+{
+}
+
 // checks winner
 int checkWin(struct Player *oppPlayer)
 {
@@ -745,6 +798,55 @@ void hardMain(struct Player *p1, struct Player *p2)
         gamePlay(curPlayer, oppPlayer);
 
         if (false) // if (checkWin(oppPlayer))
+        {
+            printf("%s wins!\n", curPlayer->name);
+            break;
+        }
+
+        struct Player *temp = curPlayer;
+        curPlayer = oppPlayer;
+        oppPlayer = temp;
+    }
+    return;
+}
+
+// one player mode, bot main
+void botMain(struct Player *player1, struct Player *player2)
+{
+    initializeRandom();
+    int firstPlayer = generateRand();
+    struct Player *curPlayer = firstPlayer == 0 ? player1 : player2;
+    struct Player *oppPlayer = firstPlayer == 0 ? player2 : player1;
+
+    while (true)
+    {
+        printf("════");
+        for (int i = 0; i < 5; i++)
+        {
+            printf("════  ⚓ ════");
+        }
+        printf("════");
+
+        printf("\n");
+
+        printf("\n%s's turn.\n", curPlayer->name);
+
+        printf("\n");
+        gridDisplay(curPlayer->grid);
+
+        printf("Opponent's grid: \n");
+        gridDisplayOpp(oppPlayer->grid);
+
+        if (strcmp(curPlayer->name, "Bob") == 0)
+        {
+            botGamePlay(curPlayer, oppPlayer);
+        }
+        else
+        {
+            gamePlay(curPlayer, oppPlayer);
+        }
+
+        if (checkWin(oppPlayer))
         {
             printf("%s wins!\n", curPlayer->name);
             break;
@@ -886,10 +988,25 @@ int main()
             printf("\n");
         }
     }
+    else
+    {
+        printf("For Player 2 (Bob):\n");
+        gridCreate(player2.grid);
+        player2.radarsweeepNB = 3;
+        player2.smokeScreenUsageNB = 3;
+        player2.smokeScreenTracker = 0;
+        player2.artilleryOneRoundTracker = 0;
+        player2.artilleryActivity = 0;
+        createShip(&player2);
+        botPlaceShip(&player2);
+        printf("Bob's Grid:\n");
+        gridDisplay(player2.grid);
+        printf("Bob's Gird has been created successfully!\n");
+    }
 
     if (numPlayers == 1)
     {
-        //  botMain(&player1, &player2);
+        botMain(&player1, &player2);
     }
     else
     {

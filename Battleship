@@ -34,6 +34,9 @@ struct Player
     int artilleryOneRoundTracker;
     int artilleryActivity;
     int radarsweeepNB;
+    int botHasLastHit;
+    int lastHitCol;
+    int lastHitRow;
 };
 
 // creates grid
@@ -709,9 +712,110 @@ void gamePlay(struct Player *curPlayer, struct Player *oppPlayer)
     }
 }
 
+// bot fire method
+void botFire(struct Player *curPlayer, struct Player *oppPlayer)
+{
+    static int visited[GRID][GRID] = {0};
+    static int firstHitRow = -1, firstHitCol = -1;
+
+    if (curPlayer->botHasLastHit == 1) // Smart targeting mode
+    {
+        printf("Smart targeting mode\n");
+
+        // Check all four directions from the last hit
+        int directions[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+        for (int d = 0; d < 4; d++)
+        {
+            int newRow = curPlayer->lastHitRow + directions[d][0];
+            int newCol = curPlayer->lastHitCol + directions[d][1];
+
+            if (newRow >= 0 && newRow < GRID && newCol >= 0 && newCol < GRID &&
+                !visited[newRow][newCol] && oppPlayer->grid[newRow][newCol] != 'o')
+            {
+                printf("Firing at (%d, %d)\n", newRow, newCol);
+                fire(curPlayer, oppPlayer, newRow, newCol);
+                visited[newRow][newCol] = 1;
+
+                if (oppPlayer->grid[newRow][newCol] == '*')
+                {
+                    printf("Hit detected! Continuing ship hunt.\n");
+                    curPlayer->lastHitRow = newRow;
+                    curPlayer->lastHitCol = newCol;
+
+                    if (firstHitRow == -1 && firstHitCol == -1)
+                    {
+                        firstHitRow = curPlayer->lastHitRow;
+                        firstHitCol = curPlayer->lastHitCol;
+                    }
+                }
+                return;
+            }
+        }
+
+        // Backtrack to first hit, if no hit detected
+        printf("Backtracking to first hit at (%d, %d)\n", firstHitRow, firstHitCol);
+        for (int d = 0; d < 4; d++)
+        {
+            int newRow = firstHitRow + directions[d][0];
+            int newCol = firstHitCol + directions[d][1];
+
+            if (newRow >= 0 && newRow < GRID && newCol >= 0 && newCol < GRID &&
+                !visited[newRow][newCol] && oppPlayer->grid[newRow][newCol] != 'o')
+            {
+                printf("Firing at (%d, %d)\n", newRow, newCol);
+                fire(curPlayer, oppPlayer, newRow, newCol);
+                visited[newRow][newCol] = 1;
+
+                if (oppPlayer->grid[newRow][newCol] == '*')
+                {
+                    printf("Hit detected! Continuing ship hunt.\n");
+                    curPlayer->lastHitRow = newRow;
+                    curPlayer->lastHitCol = newCol;
+                }
+                return;
+            }
+        }
+
+        // all directions around the first and last hit failed, reset smart mode
+        printf("Resetting smart targeting.\n");
+        curPlayer->botHasLastHit = 0;
+        firstHitRow = -1;
+        firstHitCol = -1;
+    }
+
+    // Random targeting mode
+    printf("Random targeting mode\n");
+    while (1)
+    {
+        int row = rand() % GRID;
+        int col = rand() % GRID;
+
+        if (!visited[row][col] && oppPlayer->grid[row][col] != 'o')
+        {
+            printf("Firing randomly at (%d, %d)\n", row, col);
+            fire(curPlayer, oppPlayer, row, col);
+            visited[row][col] = 1;
+
+            if (oppPlayer->grid[row][col] == '*')
+            {
+                printf("Hit detected! Switching to smart targeting mode.\n");
+                curPlayer->botHasLastHit = 1;
+                curPlayer->lastHitRow = row;
+                curPlayer->lastHitCol = col;
+
+                firstHitRow = row;
+                firstHitCol = col;
+            }
+            return;
+        }
+    }
+}
+
 // bot gameplay, calls all bot methods accoridng to conditions
 void botGamePlay(struct Player *curPlayer, struct Player *oppPlayer)
 {
+    botFire(curPlayer, oppPlayer);
+    return;
 }
 
 // checks winner
@@ -948,7 +1052,9 @@ int main()
     player1.smokeScreenTracker = 0;
     player1.artilleryOneRoundTracker = 0;
     player1.artilleryActivity = 0;
-
+    player1.botHasLastHit = 0;
+    player1.lastHitCol = 0;
+    player1.lastHitRow = 0;
     createShip(&player1);
     placeShip(&player1);
     printf("Player 1's grid:\n");
@@ -973,6 +1079,9 @@ int main()
         player2.smokeScreenTracker = 0;
         player2.artilleryOneRoundTracker = 0;
         player2.artilleryActivity = 0;
+        player2.botHasLastHit = 0;
+        player2.lastHitCol = 0;
+        player2.lastHitRow = 0;
         createShip(&player2);
         placeShip(&player2);
         printf("Player 2's grid:\n");
@@ -997,6 +1106,9 @@ int main()
         player2.smokeScreenTracker = 0;
         player2.artilleryOneRoundTracker = 0;
         player2.artilleryActivity = 0;
+        player2.botHasLastHit = 0;
+        player2.lastHitCol = 0;
+        player2.lastHitRow = 0;
         createShip(&player2);
         botPlaceShip(&player2);
         printf("Bob's Grid:\n");

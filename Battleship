@@ -367,7 +367,7 @@ void fire(struct Player *curPlayer, struct Player *oppPlayer, int row, int col)
             printf("Miss At Coordinates (%c%D)!\n", 'A' + col, row + 1);
         }
 
-        curPlayer->grid[row][col] = 'o';
+        oppPlayer->grid[row][col] = 'o';
     }
 }
 

@@ -26,7 +26,7 @@ struct Player
 {
     char name[50];
     char grid[GRID][GRID];
-    char copiedGird[GRID][GRID];
+    char copiedGrid[GRID][GRID];
     char difficulty[10];
     struct Ship ships[4];
     int smokeScreenUsageNB;
@@ -37,6 +37,8 @@ struct Player
     int botHasLastHit;
     int lastHitCol;
     int lastHitRow;
+
+    int smokescreenBotHitDetect;
 };
 
 // creates grid
@@ -279,9 +281,14 @@ void botPlaceShip(struct Player *player)
 
             if (canPlaceShip(player->grid, row, col, curShip->size, dir))
             {
+
+                player->ships[i].row = row;
+                player->ships[i].col = col;
                 // fix row, change col
                 if (dir == 'h')
                 {
+                    player->ships[i].direction = 0;
+
                     for (int i = col; i < col + curShip->size; i++)
                     {
                         player->grid[row][i] = curShip->name[0];
@@ -289,6 +296,8 @@ void botPlaceShip(struct Player *player)
                 }
                 else
                 {
+                    player->ships[i].direction = 1;
+
                     for (int i = row; i < row + curShip->size; i++)
                     {
                         player->grid[i][col] = curShip->name[0];
@@ -322,7 +331,7 @@ void fire(struct Player *curPlayer, struct Player *oppPlayer, int row, int col)
     // was attacked
     if (oppPlayer->grid[row][col] == '*' || oppPlayer->grid[row][col] == 'o')
     {
-        printf("You already attacked the given coordinates (%c%D)! Try again.\n", 'A' + col, row + 1);
+        printf("You already attacked the given coordinates (%c%d)! Try again.\n", 'A' + col, row + 1);
         gamePlay(curPlayer, oppPlayer);
         return;
     }
@@ -331,6 +340,10 @@ void fire(struct Player *curPlayer, struct Player *oppPlayer, int row, int col)
     if (oppPlayer->grid[row][col] == 'X')
     {
         printf("The fire attack was blocked by smoke screen!\n");
+
+        curPlayer->smokescreenBotHitDetect = 0;
+        curPlayer->lastHitRow = 0;
+        curPlayer->lastHitCol = 0;
         return;
     }
 
@@ -339,11 +352,19 @@ void fire(struct Player *curPlayer, struct Player *oppPlayer, int row, int col)
     {
         if (strcmp(curPlayer->difficulty, "easy") == 0)
         {
-            printf("Hit At Coordinates (%c%D)!\n", 'A' + col, row + 1);
+            printf("Hit At Coordinates (%c%d)!\n", 'A' + col, row + 1);
         }
 
         char shipNameLetter = oppPlayer->grid[row][col];
         oppPlayer->grid[row][col] = '*';
+
+        // smokecreen usage bot case
+        if (strcmp(curPlayer->difficulty, "Bob") != 0)
+        {
+            curPlayer->smokescreenBotHitDetect = 1;
+            curPlayer->lastHitRow = row;
+            curPlayer->lastHitCol = col;
+        }
 
         for (int i = 0; i < 4; i++)
         {
@@ -367,10 +388,15 @@ void fire(struct Player *curPlayer, struct Player *oppPlayer, int row, int col)
     {
         if (strcmp(curPlayer->difficulty, "easy") == 0)
         {
-            printf("Miss At Coordinates (%c%D)!\n", 'A' + col, row + 1);
+            printf("Miss At Coordinates (%c%d)!\n", 'A' + col, row + 1);
         }
 
         oppPlayer->grid[row][col] = 'o';
+
+        // sc
+        curPlayer->smokescreenBotHitDetect = 0;
+        curPlayer->lastHitRow = 0;
+        curPlayer->lastHitCol = 0;
     }
 }
 
@@ -429,15 +455,15 @@ void smokescreen(struct Player *curPlayer, struct Player *oppPlayer, int row, in
             return;
         }
 
-        printf("Activating 2x2 smoke screen area at coordinates (%c%d)!\n", 'A' + col, row + 1);
+        printf("Activating 2x2 smoke screen area at (%c%d)!\n", 'A' + col, row + 1);
         curPlayer->smokeScreenTracker = 2;
-        gridCopy(curPlayer->grid, curPlayer->copiedGird);
+        gridCopy(curPlayer->grid, curPlayer->copiedGrid);
 
         for (int i = row; i < row + 2; i++)
         {
             for (int j = col; j < col + 2; j++)
             {
-                if (curPlayer->grid[i][j] != '*')
+                if (curPlayer->grid[i][j] != '*' && curPlayer->grid[i][j] != 'o')
                 {
                     curPlayer->grid[i][j] = 'X';
                 }
@@ -464,7 +490,7 @@ void checkSmokeScreen(struct Player *curPlayer)
             {
                 if (curPlayer->grid[i][j] == 'X')
                 {
-                    curPlayer->grid[i][j] = curPlayer->copiedGird[i][j];
+                    curPlayer->grid[i][j] = curPlayer->copiedGrid[i][j];
                     smokescreenFound = 1;
                 }
             }
@@ -811,9 +837,111 @@ void botFire(struct Player *curPlayer, struct Player *oppPlayer)
     }
 }
 
+// smokescreen uplied to bot, both random and smartly
+void botSmokeScreen(struct Player *curPlayer, struct Player *oppPlayer)
+{
+    if (oppPlayer->smokescreenBotHitDetect == 1)
+    {
+        curPlayer->smokeScreenTracker = 2;
+        gridCopy(curPlayer->grid, curPlayer->copiedGrid);
+
+        // must loop ship, see which one got hit and activate in that direction
+
+        int dir = -1;
+        int row = oppPlayer->lastHitRow;
+        int col = oppPlayer->lastHitCol;
+
+        for (int i = 0; i < 4; i++)
+        {
+            if (curPlayer->ships[i].hits > 0)
+            {
+                dir = curPlayer->ships[i].direction;
+                break;
+            }
+        }
+
+        if (dir == 0) // dir 'h
+        {
+            if (col > 0 && curPlayer->grid[row][col - 1] != '~' && curPlayer->grid[row][col - 1] != '*' && curPlayer->grid[row][col - 1] != 'o')
+            {
+                col -= 1;
+            }
+            else
+            {
+
+                col += 1;
+            }
+        }
+        else
+        {
+            if (row > 0 && curPlayer->grid[row - 1][col] != '~' && curPlayer->grid[row - 1][col] != '*' && curPlayer->grid[row - 1][col] != 'o')
+            {
+                row -= 1;
+            }
+            else
+            {
+                row += 1;
+            }
+        }
+
+        printf("Activating 2x2 smoke screen area at (%c%d)!\n", 'A' + col, row + 1);
+
+        if (row + 2 <= GRID && col + 2 <= GRID)
+        {
+            for (int i = row; i < row + 2; i++)
+            {
+                for (int j = col; j < col + 2; j++)
+                {
+                    if (curPlayer->grid[i][j] != '*' && curPlayer->grid[i][j] != 'o')
+                    {
+                        curPlayer->grid[i][j] = 'X';
+                    }
+                }
+            }
+        }
+
+        return;
+    }
+
+    // random smokescreen
+    while (true)
+    {
+        int row = rand() % 10;
+        int col = rand() % 10;
+
+        if (row + 2 <= GRID && col + 2 <= GRID)
+        {
+            printf("Activating 2x2 smoke screen area at (%c%d)!\n", 'A' + col, row + 1);
+            curPlayer->smokeScreenTracker = 2;
+            gridCopy(curPlayer->grid, curPlayer->copiedGrid);
+
+            for (int i = row; i < row + 2; i++)
+            {
+                for (int j = col; j < col + 2; j++)
+                {
+                    if (curPlayer->grid[i][j] != '*' && curPlayer->grid[i][j] != 'o')
+                    {
+                        curPlayer->grid[i][j] = 'X';
+                    }
+                }
+            }
+            break;
+        }
+    }
+}
+
 // bot gameplay, calls all bot methods accoridng to conditions
 void botGamePlay(struct Player *curPlayer, struct Player *oppPlayer)
 {
+    checkSmokeScreen(curPlayer);
+
+    if (oppPlayer->smokescreenBotHitDetect == 1) // if location attacked
+    {
+        botSmokeScreen(curPlayer, oppPlayer);
+        return;
+    }
+
+    // bot fire method
     botFire(curPlayer, oppPlayer);
     return;
 }
@@ -901,7 +1029,7 @@ void hardMain(struct Player *p1, struct Player *p2)
 
         gamePlay(curPlayer, oppPlayer);
 
-        if (false) // if (checkWin(oppPlayer))
+        if (checkWin(oppPlayer))
         {
             printf("%s wins!\n", curPlayer->name);
             break;
@@ -1055,6 +1183,7 @@ int main()
     player1.botHasLastHit = 0;
     player1.lastHitCol = 0;
     player1.lastHitRow = 0;
+    player1.smokescreenBotHitDetect = 0;
     createShip(&player1);
     placeShip(&player1);
     printf("Player 1's grid:\n");
@@ -1080,8 +1209,7 @@ int main()
         player2.artilleryOneRoundTracker = 0;
         player2.artilleryActivity = 0;
         player2.botHasLastHit = 0;
-        player2.lastHitCol = 0;
-        player2.lastHitRow = 0;
+        player2.smokescreenBotHitDetect = 0;
         createShip(&player2);
         placeShip(&player2);
         printf("Player 2's grid:\n");
@@ -1109,6 +1237,7 @@ int main()
         player2.botHasLastHit = 0;
         player2.lastHitCol = 0;
         player2.lastHitRow = 0;
+        player2.smokescreenBotHitDetect = 0;
         createShip(&player2);
         botPlaceShip(&player2);
         printf("Bob's Grid:\n");

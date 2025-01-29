@@ -451,6 +451,12 @@ void smokescreen(struct Player *curPlayer, struct Player *oppPlayer, int row, in
         printf("You used all of the 3 smoke screens you have!\n");
         return;
     }
+    else if (curPlayer->smokeScreenTracker != 0)
+    {
+        printf("You can't use more than 2 smoke screens at same time!\n");
+        gamePlay(curPlayer, oppPlayer);
+        return;
+    }
     else
     {
         if (row + 2 > GRID || col + 2 > GRID)
@@ -504,7 +510,10 @@ void checkSmokeScreen(struct Player *curPlayer)
         if (smokescreenFound == 1)
         {
             curPlayer->smokeScreenUsageNB--;
-            printf("Smokescreen effect have expired! (%d usages left)\n", curPlayer->smokeScreenUsageNB);
+            if (curPlayer->smokeScreenUsageNB >= 0)
+            {
+                printf("Smokescreen effect have expired! (%d usages left)\n", curPlayer->smokeScreenUsageNB);
+            }
         }
 
         return;
@@ -738,7 +747,7 @@ void gamePlay(struct Player *curPlayer, struct Player *oppPlayer)
         }
         else
         {
-            printf("Unknown command: %s. Valid commands are 'fire' or 'smokescreen'.\n", command);
+            printf("Unknown command: %s. Valid commands are 'fire' or 'smokescreen' or 'radarsweep' or'artillery' or 'torpedo'.\n", command);
         }
     }
 }
@@ -938,7 +947,7 @@ void botGamePlay(struct Player *curPlayer, struct Player *oppPlayer)
 {
     checkSmokeScreen(curPlayer);
 
-    if (oppPlayer->smokescreenBotHitDetect == 1 && curPlayer->smokeScreenUsageNB > 0) // if location attacked
+    if (oppPlayer->smokescreenBotHitDetect == 1 && curPlayer->smokeScreenUsageNB > 0 && curPlayer->smokeScreenTracker == 0) // if location attacked
     {
         botSmokeScreen(curPlayer, oppPlayer);
         return;
